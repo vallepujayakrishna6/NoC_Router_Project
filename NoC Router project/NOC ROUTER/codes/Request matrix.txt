@@ -1,0 +1,30 @@
+module request_matrix (
+    input  wire [4:0] in_req_N, // [0:N, 1:S, 2:E, 3:W, 4:L]
+    input  wire [4:0] in_req_S,
+    input  wire [4:0] in_req_E,
+    input  wire [4:0] in_req_W,
+    input  wire [4:0] in_req_L,
+
+    output wire [4:0] out_req_N, // bits: [0]=N, [1]=S, [2]=E, [3]=W, [4]=L
+    output wire [4:0] out_req_S,
+    output wire [4:0] out_req_E,
+    output wire [4:0] out_req_W,
+    output wire [4:0] out_req_L
+);
+
+    // Collect all incoming requests targeting output North (Index 0)
+    assign out_req_N = {in_req_L[0], in_req_W[0], in_req_E[0], in_req_S[0], in_req_N[0]};
+
+    // Collect all incoming requests targeting output South (Index 1)
+    assign out_req_S = {in_req_L[1], in_req_W[1], in_req_E[1], in_req_S[1], in_req_N[1]};
+
+    // Collect all incoming requests targeting output East (Index 2)
+    assign out_req_E = {in_req_L[2], in_req_W[2], in_req_E[2], in_req_S[2], in_req_N[2]};
+
+    // Collect all incoming requests targeting output West (Index 3)
+    assign out_req_W = {in_req_L[3], in_req_W[3], in_req_E[3], in_req_S[3], in_req_N[3]};
+
+    // Collect all incoming requests targeting output Local (Index 4)
+    assign out_req_L = {in_req_L[4], in_req_W[4], in_req_E[4], in_req_S[4], in_req_N[4]};
+
+endmodule

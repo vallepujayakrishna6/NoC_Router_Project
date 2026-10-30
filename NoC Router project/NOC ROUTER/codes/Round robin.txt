@@ -1,0 +1,75 @@
+module round_robin_arbiter (
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire [4:0] req,       // Requests from inputs [0..4]
+    output reg  [4:0] grant,     // One-hot grant
+    output wire       grant_valid
+);
+
+    reg [2:0] priority_ptr; // Priority offset pointer (0 to 4)
+    reg [4:0] nxt_grant;
+
+    assign grant_valid = |grant;
+
+    // Combinational round-robin priority resolution
+    always @(*) begin
+        nxt_grant = 5'b00000;
+        case (priority_ptr)
+            3'd0: begin
+                if      (req[0]) nxt_grant = 5'b00001;
+                else if (req[1]) nxt_grant = 5'b00010;
+                else if (req[2]) nxt_grant = 5'b00100;
+                else if (req[3]) nxt_grant = 5'b01000;
+                else if (req[4]) nxt_grant = 5'b10000;
+            end
+            3'd1: begin
+                if      (req[1]) nxt_grant = 5'b00010;
+                else if (req[2]) nxt_grant = 5'b00100;
+                else if (req[3]) nxt_grant = 5'b01000;
+                else if (req[4]) nxt_grant = 5'b10000;
+                else if (req[0]) nxt_grant = 5'b00001;
+            end
+            3'd2: begin
+                if      (req[2]) nxt_grant = 5'b00100;
+                else if (req[3]) nxt_grant = 5'b01000;
+                else if (req[4]) nxt_grant = 5'b10000;
+                else if (req[0]) nxt_grant = 5'b00001;
+                else if (req[1]) nxt_grant = 5'b00010;
+            end
+            3'd3: begin
+                if      (req[3]) nxt_grant = 5'b01000;
+                else if (req[4]) nxt_grant = 5'b10000;
+                else if (req[0]) nxt_grant = 5'b00001;
+                else if (req[1]) nxt_grant = 5'b00010;
+                else if (req[2]) nxt_grant = 5'b00100;
+            end
+            3'd4: begin
+                if      (req[4]) nxt_grant = 5'b10000;
+                else if (req[0]) nxt_grant = 5'b00001;
+                else if (req[1]) nxt_grant = 5'b00010;
+                else if (req[2]) nxt_grant = 5'b00100;
+                else if (req[3]) nxt_grant = 5'b01000;
+            end
+            default: nxt_grant = 5'b00000;
+        endcase
+    end
+
+    // Sequential state updates
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            grant        <= 5'b00000;
+            priority_ptr <= 3'd0;
+        end else begin
+            grant <= nxt_grant;
+            // Update priority pointer upon successful grant
+            if (|nxt_grant) begin
+                if (nxt_grant[0]) priority_ptr <= 3'd1;
+                else if (nxt_grant[1]) priority_ptr <= 3'd2;
+                else if (nxt_grant[2]) priority_ptr <= 3'd3;
+                else if (nxt_grant[3]) priority_ptr <= 3'd4;
+                else if (nxt_grant[4]) priority_ptr <= 3'd0;
+            end
+        end
+    end
+
+endmodule

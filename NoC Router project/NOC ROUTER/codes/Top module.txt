@@ -1,0 +1,150 @@
+module noc_router_top #(
+    parameter DATA_WIDTH = 32,
+    parameter FIFO_DEPTH = 8,
+    parameter [3:0] ROUTER_X = 4'd1,
+    parameter [3:0] ROUTER_Y = 4'd1
+)(
+    input  wire                   clk,
+    input  wire                   rst_n,
+
+    // 5 Input Interface Ports
+    input  wire                   wr_en_N,
+    input  wire [DATA_WIDTH-1:0]  wr_data_N,
+    output wire                   full_N,
+
+    input  wire                   wr_en_S,
+    input  wire [DATA_WIDTH-1:0]  wr_data_S,
+    output wire                   full_S,
+
+    input  wire                   wr_en_E,
+    input  wire [DATA_WIDTH-1:0]  wr_data_E,
+    output wire                   full_E,
+
+    input  wire                   wr_en_W,
+    input  wire [DATA_WIDTH-1:0]  wr_data_W,
+    output wire                   full_W,
+
+    input  wire                   wr_en_L,
+    input  wire [DATA_WIDTH-1:0]  wr_data_L,
+    output wire                   full_L,
+
+    // 5 Output Interface Ports
+    output wire [DATA_WIDTH-1:0]  data_out_N,
+    output wire [DATA_WIDTH-1:0]  data_out_S,
+    output wire [DATA_WIDTH-1:0]  data_out_E,
+    output wire [DATA_WIDTH-1:0]  data_out_W,
+    output wire [DATA_WIDTH-1:0]  data_out_L,
+    output wire [4:0]             valid_out
+);
+
+    // -------------------------------------------------------------
+    // Internal Interconnect Signals
+    // -------------------------------------------------------------
+    wire [DATA_WIDTH-1:0] peek_N, peek_S, peek_E, peek_W, peek_L;
+    wire [DATA_WIDTH-1:0] rd_data_N, rd_data_S, rd_data_E, rd_data_W, rd_data_L;
+    wire                  empty_N, empty_S, empty_E, empty_W, empty_L;
+
+    wire [4:0] req_N, req_S, req_E, req_W, req_L;
+    wire [4:0] out_req_N, out_req_S, out_req_E, out_req_W, out_req_L;
+    wire [4:0] grant_N, grant_S, grant_E, grant_W, grant_L;
+
+    // FIFO Dequeue: Read an entry when any output port grants this input
+    wire rd_en_N = (grant_N[0] | grant_S[0] | grant_E[0] | grant_W[0] | grant_L[0]) & !empty_N;
+    wire rd_en_S = (grant_N[1] | grant_S[1] | grant_E[1] | grant_W[1] | grant_L[1]) & !empty_S;
+    wire rd_en_E = (grant_N[2] | grant_S[2] | grant_E[2] | grant_W[2] | grant_L[2]) & !empty_E;
+    wire rd_en_W = (grant_N[3] | grant_S[3] | grant_E[3] | grant_W[3] | grant_L[3]) & !empty_W;
+    wire rd_en_L = (grant_N[4] | grant_S[4] | grant_E[4] | grant_W[4] | grant_L[4]) & !empty_L;
+
+    // -------------------------------------------------------------
+    // 1. Five Synchronous Input FIFOs (Using peek_data bus)
+    // -------------------------------------------------------------
+    sync_fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) fifo_N (
+        .clk(clk), .rst_n(rst_n), .wr_en(wr_en_N), .wr_data(wr_data_N), .full(full_N),
+        .rd_en(rd_en_N), .rd_data(rd_data_N), .empty(empty_N), .peek_data(peek_N), .data_count()
+    );
+
+    sync_fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) fifo_S (
+        .clk(clk), .rst_n(rst_n), .wr_en(wr_en_S), .wr_data(wr_data_S), .full(full_S),
+        .rd_en(rd_en_S), .rd_data(rd_data_S), .empty(empty_S), .peek_data(peek_S), .data_count()
+    );
+
+    sync_fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) fifo_E (
+        .clk(clk), .rst_n(rst_n), .wr_en(wr_en_E), .wr_data(wr_data_E), .full(full_E),
+        .rd_en(rd_en_E), .rd_data(rd_data_E), .empty(empty_E), .peek_data(peek_E), .data_count()
+    );
+
+    sync_fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) fifo_W (
+        .clk(clk), .rst_n(rst_n), .wr_en(wr_en_W), .wr_data(wr_data_W), .full(full_W),
+        .rd_en(rd_en_W), .rd_data(rd_data_W), .empty(empty_W), .peek_data(peek_W), .data_count()
+    );
+
+    sync_fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_DEPTH(FIFO_DEPTH)) fifo_L (
+        .clk(clk), .rst_n(rst_n), .wr_en(wr_en_L), .wr_data(wr_data_L), .full(full_L),
+        .rd_en(rd_en_L), .rd_data(rd_data_L), .empty(empty_L), .peek_data(peek_L), .data_count()
+    );
+
+    // -------------------------------------------------------------
+    // 2. Five Routing Units
+    // -------------------------------------------------------------
+    xy_routing_unit #(.CURRENT_X(ROUTER_X), .CURRENT_Y(ROUTER_Y)) xy_N (
+        .flit_header(peek_N), .valid_in(!empty_N), .req_out(req_N)
+    );
+
+    xy_routing_unit #(.CURRENT_X(ROUTER_X), .CURRENT_Y(ROUTER_Y)) xy_S (
+        .flit_header(peek_S), .valid_in(!empty_S), .req_out(req_S)
+    );
+
+    xy_routing_unit #(.CURRENT_X(ROUTER_X), .CURRENT_Y(ROUTER_Y)) xy_E (
+        .flit_header(peek_E), .valid_in(!empty_E), .req_out(req_E)
+    );
+
+    xy_routing_unit #(.CURRENT_X(ROUTER_X), .CURRENT_Y(ROUTER_Y)) xy_W (
+        .flit_header(peek_W), .valid_in(!empty_W), .req_out(req_W)
+    );
+
+    xy_routing_unit #(.CURRENT_X(ROUTER_X), .CURRENT_Y(ROUTER_Y)) xy_L (
+        .flit_header(peek_L), .valid_in(!empty_L), .req_out(req_L)
+    );
+
+    // -------------------------------------------------------------
+    // 3. Request Matrix
+    // -------------------------------------------------------------
+    request_matrix req_matrix (
+        .in_req_N(req_N), .in_req_S(req_S), .in_req_E(req_E), .in_req_W(req_W), .in_req_L(req_L),
+        .out_req_N(out_req_N), .out_req_S(out_req_S), .out_req_E(out_req_E), .out_req_W(out_req_W), .out_req_L(out_req_L)
+    );
+
+    // -------------------------------------------------------------
+    // 4. Five Round-Robin Arbiters (Matching the exact tested entity)
+    // -------------------------------------------------------------
+    round_robin_arbiter arbiter_N (
+        .clk(clk), .rst_n(rst_n), .req(out_req_N), .grant(grant_N), .grant_valid()
+    );
+
+    round_robin_arbiter arbiter_S (
+        .clk(clk), .rst_n(rst_n), .req(out_req_S), .grant(grant_S), .grant_valid()
+    );
+
+    round_robin_arbiter arbiter_E (
+        .clk(clk), .rst_n(rst_n), .req(out_req_E), .grant(grant_E), .grant_valid()
+    );
+
+    round_robin_arbiter arbiter_W (
+        .clk(clk), .rst_n(rst_n), .req(out_req_W), .grant(grant_W), .grant_valid()
+    );
+
+    round_robin_arbiter arbiter_L (
+        .clk(clk), .rst_n(rst_n), .req(out_req_L), .grant(grant_L), .grant_valid()
+    );
+
+    // -------------------------------------------------------------
+    // 5. 5x5 Crossbar Switch (Matching the exact tested entity)
+    // -------------------------------------------------------------
+    crossbar_5x5 #(.DATA_WIDTH(DATA_WIDTH)) crossbar (
+        .data_in_N(peek_N), .data_in_S(peek_S), .data_in_E(peek_E), .data_in_W(peek_W), .data_in_L(peek_L),
+        .grant_out_N(grant_N), .grant_out_S(grant_S), .grant_out_E(grant_E), .grant_out_W(grant_W), .grant_out_L(grant_L),
+        .data_out_N(data_out_N), .data_out_S(data_out_S), .data_out_E(data_out_E), .data_out_W(data_out_W), .data_out_L(data_out_L),
+        .valid_out(valid_out)
+    );
+
+endmodule

@@ -1,0 +1,105 @@
+module noc_router_top_tb;
+
+    parameter DATA_WIDTH = 32;
+    parameter FIFO_DEPTH = 8;
+    parameter [3:0] ROUTER_X = 4'd1;
+    parameter [3:0] ROUTER_Y = 4'd1;
+
+    reg clk;
+    reg rst_n;
+
+    // Inputs
+    reg                  wr_en_N, wr_en_S, wr_en_E, wr_en_W, wr_en_L;
+    reg [DATA_WIDTH-1:0] wr_data_N, wr_data_S, wr_data_E, wr_data_W, wr_data_L;
+    wire                 full_N, full_S, full_E, full_W, full_L;
+
+    // Outputs
+    wire [DATA_WIDTH-1:0] data_out_N, data_out_S, data_out_E, data_out_W, data_out_L;
+    wire [4:0]            valid_out;
+
+    // UUT Instantiation
+    noc_router_top #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .FIFO_DEPTH(FIFO_DEPTH),
+        .ROUTER_X(ROUTER_X),
+        .ROUTER_Y(ROUTER_Y)
+    ) uut (
+        .clk(clk), .rst_n(rst_n),
+        .wr_en_N(wr_en_N), .wr_data_N(wr_data_N), .full_N(full_N),
+        .wr_en_S(wr_en_S), .wr_data_S(wr_data_S), .full_S(full_S),
+        .wr_en_E(wr_en_E), .wr_data_E(wr_data_E), .full_E(full_E),
+        .wr_en_W(wr_en_W), .wr_data_W(wr_data_W), .full_W(full_W),
+        .wr_en_L(wr_en_L), .wr_data_L(wr_data_L), .full_L(full_L),
+        .data_out_N(data_out_N), .data_out_S(data_out_S), .data_out_E(data_out_E),
+        .data_out_W(data_out_W), .data_out_L(data_out_L),
+        .valid_out(valid_out)
+    );
+
+    // 100MHz clock
+    always #5 clk = ~clk;
+
+    initial begin
+        clk   = 0;
+        rst_n = 0;
+        wr_en_N = 0; wr_en_S = 0; wr_en_E = 0; wr_en_W = 0; wr_en_L = 0;
+        wr_data_N = 0; wr_data_S = 0; wr_data_E = 0; wr_data_W = 0; wr_data_L = 0;
+
+        #20;
+        @(posedge clk);
+        rst_n = 1;
+        #10;
+
+        // -----------------------------------------------------------
+        // Scenario 1: Parallel Conflict-Free Routing
+        // Port L sends to (2, 1) -> Routes EAST
+        // Port N sends to (1, 0) -> Routes SOUTH
+        // -----------------------------------------------------------
+        @(posedge clk);
+        wr_en_L   <= 1'b1;
+        wr_data_L <= {8'h10, 4'd2, 4'd1, 16'h1111}; // Dest X=2, Y=1
+
+        wr_en_N   <= 1'b1;
+        wr_data_N <= {8'h10, 4'd1, 4'd0, 16'h2222}; // Dest X=1, Y=0
+
+        @(posedge clk);
+        wr_en_L   <= 1'b0;
+        wr_en_N   <= 1'b0;
+
+        repeat (4) @(posedge clk);
+
+        // -----------------------------------------------------------
+        // Scenario 2: Contention on EAST Output Port
+        // Both West and North attempt sending flits to (3, 1) -> EAST
+        // Round-Robin will alternate and route them cycle by cycle
+        // -----------------------------------------------------------
+        @(posedge clk);
+        wr_en_W   <= 1'b1;
+        wr_data_W <= {8'h10, 4'd3, 4'd1, 16'hAAAA};
+
+        wr_en_N   <= 1'b1;
+        wr_data_N <= {8'h10, 4'd3, 4'd1, 16'hBBBB};
+
+        @(posedge clk);
+        wr_en_W   <= 1'b0;
+        wr_en_N   <= 1'b0;
+
+        repeat (5) @(posedge clk);
+
+        // -----------------------------------------------------------
+        // Scenario 3: Local Node Delivery
+        // East In sends packet destined for (1, 1) -> LOCAL
+        // -----------------------------------------------------------
+        @(posedge clk);
+        wr_en_E   <= 1'b1;
+        wr_data_E <= {8'h10, 4'd1, 4'd1, 16'hFEED};
+
+        @(posedge clk);
+        wr_en_E   <= 1'b0;
+
+        repeat (4) @(posedge clk);
+
+        $display(">> Top Router Integration Test Complete <<");
+        $finish;
+    end
+
+endmodule

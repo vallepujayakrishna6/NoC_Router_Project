@@ -1,0 +1,63 @@
+module sync_fifo #(
+    parameter DATA_WIDTH = 32,
+    parameter FIFO_DEPTH = 8,
+    parameter ADDR_WIDTH = $clog2(FIFO_DEPTH)
+)(
+    input  wire                  clk,
+    input  wire                  rst_n,
+
+    // Write Port
+    input  wire                  wr_en,
+    input  wire [DATA_WIDTH-1:0] wr_data,
+    output wire                  full,
+
+    // Read Port
+    input  wire                  rd_en,
+    output reg  [DATA_WIDTH-1:0] rd_data,
+    output wire                  empty,
+
+    // Lookahead Peek Bus (Zeroed when empty to avoid reading uninitialized RAM)
+    output wire [DATA_WIDTH-1:0] peek_data,
+    output reg  [ADDR_WIDTH:0]   data_count
+);
+
+    reg [DATA_WIDTH-1:0] mem [0:FIFO_DEPTH-1];
+    reg [ADDR_WIDTH-1:0] wr_ptr;
+    reg [ADDR_WIDTH-1:0] rd_ptr;
+
+    assign empty     = (data_count == 0);
+    assign full      = (data_count == FIFO_DEPTH);
+
+    // FIXED: Clamps peek_data to 0 when empty instead of reading invalid RAM addresses
+    assign peek_data = (!empty) ? mem[rd_ptr] : {DATA_WIDTH{1'b0}};
+
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            wr_ptr     <= {ADDR_WIDTH{1'b0}};
+            rd_ptr     <= {ADDR_WIDTH{1'b0}};
+            data_count <= {(ADDR_WIDTH+1){1'b0}};
+            rd_data    <= {DATA_WIDTH{1'b0}};
+        end else begin
+            case ({wr_en && !full, rd_en && !empty})
+                2'b10: begin // Write only
+                    mem[wr_ptr] <= wr_data;
+                    wr_ptr      <= (wr_ptr == FIFO_DEPTH - 1) ? {ADDR_WIDTH{1'b0}} : wr_ptr + 1'b1;
+                    data_count  <= data_count + 1'b1;
+                end
+                2'b01: begin // Read only
+                    rd_data    <= mem[rd_ptr];
+                    rd_ptr     <= (rd_ptr == FIFO_DEPTH - 1) ? {ADDR_WIDTH{1'b0}} : rd_ptr + 1'b1;
+                    data_count <= data_count - 1'b1;
+                end
+                2'b11: begin // Simultaneous Read and Write
+                    mem[wr_ptr] <= wr_data;
+                    rd_data     <= mem[rd_ptr];
+                    wr_ptr      <= (wr_ptr == FIFO_DEPTH - 1) ? {ADDR_WIDTH{1'b0}} : wr_ptr + 1'b1;
+                    rd_ptr      <= (rd_ptr == FIFO_DEPTH - 1) ? {ADDR_WIDTH{1'b0}} : rd_ptr + 1'b1;
+                end
+                default: ;
+            endcase
+        end
+    end
+
+endmodule

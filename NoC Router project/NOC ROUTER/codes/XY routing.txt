@@ -1,0 +1,34 @@
+module xy_routing_unit #(
+    parameter [3:0] CURRENT_X = 4'd1,
+    parameter [3:0] CURRENT_Y = 4'd1
+)(
+    input  wire [31:0] flit_header,
+    input  wire        valid_in,
+    output reg  [4:0]  req_out // [0]=N, [1]=S, [2]=E, [3]=W, [4]=L
+);
+
+    wire [3:0] dest_x = flit_header[23:20];
+    wire [3:0] dest_y = flit_header[19:16];
+
+    always @(*) begin
+        req_out = 5'b00000;
+        if (valid_in) begin
+            // 1. Resolve X dimension first
+            if (dest_x > CURRENT_X) begin
+                req_out = 5'b00100; // East (Index 2)
+            end else if (dest_x < CURRENT_X) begin
+                req_out = 5'b01000; // West (Index 3)
+            end else begin
+                // 2. Resolve Y dimension once destination X is reached
+                if (dest_y > CURRENT_Y) begin
+                    req_out = 5'b00001; // North (Index 0)
+                end else if (dest_y < CURRENT_Y) begin
+                    req_out = 5'b00010; // South (Index 1)
+                end else begin
+                    req_out = 5'b10000; // Local (Index 4)
+                end
+            end
+        end
+    end
+
+endmodule

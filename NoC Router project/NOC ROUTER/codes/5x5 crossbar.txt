@@ -1,0 +1,57 @@
+module crossbar_5x5 #(
+    parameter DATA_WIDTH = 32
+)(
+    // 5 Input Data Channels
+    input  wire [DATA_WIDTH-1:0] data_in_N,
+    input  wire [DATA_WIDTH-1:0] data_in_S,
+    input  wire [DATA_WIDTH-1:0] data_in_E,
+    input  wire [DATA_WIDTH-1:0] data_in_W,
+    input  wire [DATA_WIDTH-1:0] data_in_L,
+
+    // Grants from the 5 Arbiters (One per output port)
+    input  wire [4:0] grant_out_N,
+    input  wire [4:0] grant_out_S,
+    input  wire [4:0] grant_out_E,
+    input  wire [4:0] grant_out_W,
+    input  wire [4:0] grant_out_L,
+
+    // 5 Output Data Channels
+    output reg  [DATA_WIDTH-1:0] data_out_N,
+    output reg  [DATA_WIDTH-1:0] data_out_S,
+    output reg  [DATA_WIDTH-1:0] data_out_E,
+    output reg  [DATA_WIDTH-1:0] data_out_W,
+    output reg  [DATA_WIDTH-1:0] data_out_L,
+
+    output wire [4:0]            valid_out
+);
+
+    assign valid_out[0] = |grant_out_N;
+    assign valid_out[1] = |grant_out_S;
+    assign valid_out[2] = |grant_out_E;
+    assign valid_out[3] = |grant_out_W;
+    assign valid_out[4] = |grant_out_L;
+
+    // Helper Multiplexer function
+    function [DATA_WIDTH-1:0] mux5(
+        input [4:0] sel,
+        input [DATA_WIDTH-1:0] in0, in1, in2, in3, in4
+    );
+        case (sel)
+            5'b00001: mux5 = in0;
+            5'b00010: mux5 = in1;
+            5'b00100: mux5 = in2;
+            5'b01000: mux5 = in3;
+            5'b10000: mux5 = in4;
+            default:  mux5 = {DATA_WIDTH{1'b0}};
+        endcase
+    endfunction
+
+    always @(*) begin
+        data_out_N = mux5(grant_out_N, data_in_N, data_in_S, data_in_E, data_in_W, data_in_L);
+        data_out_S = mux5(grant_out_S, data_in_N, data_in_S, data_in_E, data_in_W, data_in_L);
+        data_out_E = mux5(grant_out_E, data_in_N, data_in_S, data_in_E, data_in_W, data_in_L);
+        data_out_W = mux5(grant_out_W, data_in_N, data_in_S, data_in_E, data_in_W, data_in_L);
+        data_out_L = mux5(grant_out_L, data_in_N, data_in_S, data_in_E, data_in_W, data_in_L);
+    end
+
+endmodule
